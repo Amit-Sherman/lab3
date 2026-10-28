@@ -2,6 +2,8 @@
 
 Collect coins, avoid drones, and survive a 45-second round. Move with arrow keys or WASD;
 press P (or Esc) to pause and R to restart. This is deliberately small so you can add features during the lab.
+Your best score is saved in the browser's `localStorage` and survives a reload
+(if storage is blocked, it is kept for the current session only).
 
 **Play it here:** https://www.avivz.net/coin-dash/
 
