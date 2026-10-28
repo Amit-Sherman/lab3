@@ -1,15 +1,21 @@
 # Coin Dash — Lab 3 starter
 
 Collect coins, avoid drones, and survive the round. Move with arrow keys or WASD;
-press P (or Esc) to pause and R to restart. Power-ups appear every 8–12 seconds and vanish after 6: a blue triangle
-(speed boost), a purple diamond (shield that absorbs one drone hit) and a white star (+5 seconds).
-This is deliberately small so you can add features during the lab.
-Your best score is saved in the browser's `localStorage` and survives a reload
-(if storage is blocked, it is kept for the current session only).
+press P (or Esc) to pause and R to restart. This is deliberately small so you can add features during the lab.
+
+Power-ups appear every 8–12 seconds and vanish after 6: a blue triangle (speed boost), a purple
+diamond (shield that absorbs one drone hit) and a white star (+5 seconds).
 
 Press 1, 2 or 3 to pick the Easy, Normal or Hard preset and restart the round. Presets live in
 `settings.js` under `difficulties` (Easy: 60 s, 2 slow drones; Normal: 45 s, 3 drones;
 Hard: 30 s, 5 fast drones); the choice is remembered in the browser.
+
+Press T to toggle a competitive two-player mode (P1 green on WASD, P2 blue on the arrow keys;
+a drone knocks out only the player it touches, and the most coins wins). Speed and shield
+power-ups go to whoever grabs them; the time bonus is shared.
+
+Your best score is saved in the browser's `localStorage` and survives a reload
+(if storage is blocked, it is kept for the current session only).
 
 **Play it here:** https://www.avivz.net/coin-dash/
 
