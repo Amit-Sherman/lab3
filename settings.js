@@ -13,6 +13,7 @@ window.COIN_DASH = {
   },
   defaultDifficulty: 'normal',
   highScoreKey: 'coinDash.highScore',
-  colors: { background: 0x101c31, player: 0x22c55e, coin: 0xffd166, drone: 0xff657a },
+  colors: { background: 0x0d0221, player: 0x39ff14, coin: 0xffe600, drone: 0xff2a6d,
+    grid: 0x9d4edd, accent: 0x05d9e8, panel: 0x150530, outline: 0xf5f0ff },
   sound: { enabled: true, volume: 0.25, muteKey: 'm' }
 };
