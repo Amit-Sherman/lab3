@@ -1,7 +1,9 @@
 # Coin Dash — Lab 3 starter
 
 Collect coins, avoid drones, and survive a 45-second round. Move with arrow keys or WASD;
-press R to restart. This is deliberately small so you can add features during the lab.
+press R to restart. Press 2 for a competitive two-player mode (P1 green on WASD, P2 blue on
+the arrow keys; a drone knocks out only the player it touches, and the most coins wins), and 1 to
+go back to single-player. This is deliberately small so you can add features during the lab.
 
 **Play it here:** https://www.avivz.net/coin-dash/
 
