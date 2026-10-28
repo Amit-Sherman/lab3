@@ -1,18 +1,26 @@
 # Coin Dash — Lab 3 starter
 
-Collect coins, avoid drones, and survive the round. Move with arrow keys or WASD;
-press P (or Esc) to pause and R to restart. This is deliberately small so you can add features during the lab.
+Collect coins, avoid enemies, and clear five levels before the round runs out. Move with arrow keys
+or WASD; press P (or Esc) to pause and R to restart. This is deliberately small so you can add
+features during the lab.
+
+Every 5 coins starts the next level, which brings a new mix of enemies: red bouncers, violet
+chasers (home in on the nearest player), mint coin guards (orbit the coin) and orange dashers
+(flash and show a charge line, then dash). Clearing level 5 wins the run. You have three lives;
+after a hit you blink and are briefly invincible, and a new level gives a short grace period.
+Levels live in `settings.js` under `levels`.
 
 Power-ups appear every 8–12 seconds and vanish after 6: a blue triangle (speed boost), a purple
-diamond (shield that absorbs one drone hit) and a white star (+5 seconds).
+diamond (shield that absorbs one enemy hit) and a white star (+5 seconds).
 
 Press 1, 2 or 3 to pick the Easy, Normal or Hard preset and restart the round. Presets live in
-`settings.js` under `difficulties` (Easy: 60 s, 2 slow drones; Normal: 45 s, 3 drones;
-Hard: 30 s, 5 fast drones); the choice is remembered in the browser.
+`settings.js` under `difficulties` (Easy: 60 s, 4 lives, slower enemies; Normal: 45 s, 3 lives;
+Hard: 30 s, 2 lives, faster enemies); the choice is remembered in the browser.
 
-Press T to toggle a competitive two-player mode (P1 green on WASD, P2 blue on the arrow keys;
-a drone knocks out only the player it touches, and the most coins wins). Speed and shield
-power-ups go to whoever grabs them; the time bonus is shared.
+Press T to toggle a competitive two-player mode (P1 green on WASD, P2 blue on the arrow keys).
+Each player has their own lives and is knocked out when they run out; coins from either player
+advance the level, and the most coins wins. Speed and shield power-ups go to whoever grabs them;
+the time bonus is shared.
 
 Your best score is saved in the browser's `localStorage` and survives a reload
 (if storage is blocked, it is kept for the current session only).
@@ -50,9 +58,10 @@ laptops' JSON files together and save the combined HTML. Use the same time windo
 - `.gitignore`: keeps generated reports out of Git.
 - `index.html`: page and script loading.
 - `style.css`: page appearance.
-- `settings.js`: round duration, speeds, difficulty presets, colours and dimensions.
+- `settings.js`: round duration, lives, level layouts, enemy tuning, speeds, difficulty presets,
+  colours and dimensions.
 - `sound.js`: synthesized sound effects (Web Audio) and the M mute toggle.
-- `game.js`: scene, input, collisions, score and end-of-round behaviour.
+- `game.js`: scene, input, enemy behaviours, levels, lives, collisions, score and end-of-round behaviour.
 - `vendor/phaser-3.90.0.min.js`: the pinned Phaser runtime, byte for byte the file published at
   `https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js`; `vendor/LICENSE.phaser.txt` is its MIT licence.
 

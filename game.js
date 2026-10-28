@@ -9,15 +9,27 @@ class CoinDash extends Phaser.Scene {
       if (!d[this.difficulty]) this.difficulty = COIN_DASH.defaultDifficulty;
     }
     const c = this.cfg = { ...COIN_DASH, ...d[this.difficulty] };
+    // Difficulty scales every enemy speed; sizes and timings stay as designed.
+    this.enemySpecs = Object.fromEntries(Object.entries(c.enemies).map(([kind, spec]) => {
+      const scaled = { ...spec };
+      for (const k of ['speed', 'maxSpeed', 'orbitSpeed', 'dashSpeed']) {
+        if (k in scaled) scaled[k] *= c.enemySpeedScale;
+      }
+      return [kind, scaled];
+    }));
     // The registry survives scene restarts, so the chosen mode sticks until changed.
     this.playerCount = this.registry.get('playerCount') || 1;
     this.best = this.loadHighScore();
     this.finished = false;
+    this.cleared = false;
+    this.levelIndex = 0;
+    this.levelCoins = 0;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
     this.add.grid(c.width / 2, c.height / 2, c.width, c.height, 40, 40,
       c.colors.background, 1, c.colors.grid, 0.3);
     this.hud = this.add.text(18, 12, '', { font: '18px monospace', color: '#ffffff' });
+    this.telegraph = this.add.graphics();
     this.cursors = this.input.keyboard.createCursorKeys();
     this.keys = this.input.keyboard.addKeys('W,A,S,D,R');
     const wasd = { up: this.keys.W, down: this.keys.S, left: this.keys.A, right: this.keys.D };
@@ -32,30 +44,18 @@ class CoinDash extends Phaser.Scene {
       const sprite = this.add.rectangle(spec.x, c.height / 2, 24, 24, spec.color);
       this.physics.add.existing(sprite);
       sprite.body.setCollideWorldBounds(true);
-      return { ...spec, sprite, score: 0, out: false };
+      return { ...spec, sprite, score: 0, lives: c.lives, out: false };
     });
     this.coin = this.add.circle(100, 100, 9, c.colors.coin);
     this.physics.add.existing(this.coin);
     this.coin.body.setCircle(9);
     this.placeCoin();
     this.initPowerUps();
-    this.drones = this.physics.add.group();
-    for (let i = 0; i < c.droneCount; i++) {
-      const drone = this.add.rectangle(c.width * (i + 0.5) / c.droneCount, 100, 26, 26, c.colors.drone);
-      this.drones.add(drone);
-      drone.body.setCollideWorldBounds(true).setBounce(1, 1);
-      const angle = (35 + i * 105) * Math.PI / 180;
-      drone.body.setVelocity(Math.cos(angle) * c.droneSpeed, Math.sin(angle) * c.droneSpeed);
-    }
+    this.enemies = this.physics.add.group();
     this.styleScene();
     for (const player of this.players) {
-      this.physics.add.overlap(player.sprite, this.coin, () => {
-        if (this.finished || player.out) return;
-        player.score++;
-        window.CoinDashSound.coin();
-        this.placeCoin();
-      });
-      this.physics.add.overlap(player.sprite, this.drones, () => this.knockOut(player),
+      this.physics.add.overlap(player.sprite, this.coin, () => this.collectCoin(player));
+      this.physics.add.overlap(player.sprite, this.enemies, () => this.hitPlayer(player),
         () => !this.shieldBlocks(player));
     }
     this.input.keyboard.on('keydown-R', () => this.scene.restart());
@@ -72,6 +72,7 @@ class CoinDash extends Phaser.Scene {
     this.input.keyboard.on('keydown-ESC', () => this.togglePause());
     Object.entries({ ONE: 'easy', TWO: 'normal', THREE: 'hard' }).forEach(([key, name]) =>
       this.input.keyboard.on(`keydown-${key}`, () => this.setDifficulty(name)));
+    this.startLevel(0);
   }
 
   setDifficulty(name) {
@@ -85,6 +86,141 @@ class CoinDash extends Phaser.Scene {
     this.scene.restart();
   }
 
+  startLevel(index) {
+    const c = this.cfg;
+    this.levelIndex = index;
+    this.levelCoins = 0;
+    this.enemies.clear(true, true);
+    for (const [kind, count] of Object.entries(c.levels[index])) {
+      for (let i = 0; i < count; i++) this.spawnEnemy(kind);
+    }
+    // A short grace period so a freshly spawned enemy can't hit a player before they react.
+    const graceUntil = this.time.now + c.levelStartGraceMs;
+    for (const player of this.players) {
+      player.invulnerableUntil = Math.max(player.invulnerableUntil, graceUntil);
+    }
+    this.levelBanner?.destroy();
+    const banner = this.levelBanner = this.add.text(c.width / 2, c.height / 2 - 60, `Level ${index + 1}`,
+      this.neonText(36, c.colors.outline, c.colors.accent)).setOrigin(0.5).setDepth(15);
+    this.tweens.add({ targets: banner, alpha: 0, delay: 700, duration: 500,
+      onComplete: () => banner.destroy() });
+  }
+
+  spawnEnemy(kind) {
+    const c = this.cfg, spec = this.enemySpecs[kind], color = c.colors[kind];
+    const active = this.players.filter(p => !p.out).map(p => p.sprite);
+    let x, y;
+    do {
+      x = Phaser.Math.Between(30, c.width - 30);
+      y = Phaser.Math.Between(75, c.height - 30);
+    } while (active.some(s => Phaser.Math.Distance.Between(x, y, s.x, s.y) < c.enemySpawnMinDistance));
+    const enemy = this.add.rectangle(x, y, spec.size, spec.size, color, 0.45).setStrokeStyle(2, color);
+    this.glow(enemy, color, 4);
+    this.enemies.add(enemy);
+    enemy.kind = kind;
+    enemy.body.setCollideWorldBounds(true);
+    if (kind === 'bouncer') {
+      const angle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+      enemy.body.setBounce(1, 1);
+      enemy.body.setVelocity(Math.cos(angle) * spec.speed, Math.sin(angle) * spec.speed);
+    } else if (kind === 'guard') {
+      enemy.orbitAngle = Phaser.Math.FloatBetween(0, Math.PI * 2);
+    } else if (kind === 'dasher') {
+      enemy.state = 'rest';
+      enemy.stateUntil = this.time.now + Phaser.Math.Between(spec.restMs / 2, spec.restMs);
+    }
+  }
+
+  // Chasers and dashers go after whichever active player is closest.
+  nearestPlayer(enemy) {
+    let best = null, bestDistance = Infinity;
+    for (const player of this.players) {
+      if (player.out) continue;
+      const distance = Phaser.Math.Distance.Between(enemy.x, enemy.y, player.sprite.x, player.sprite.y);
+      if (distance < bestDistance) [best, bestDistance] = [player.sprite, distance];
+    }
+    return best;
+  }
+
+  updateEnemies(delta) {
+    const now = this.time.now;
+    this.telegraph.clear();
+    for (const enemy of this.enemies.getChildren()) {
+      const spec = this.enemySpecs[enemy.kind];
+      if (enemy.kind === 'chaser') {
+        const target = this.nearestPlayer(enemy);
+        if (target) this.physics.moveToObject(enemy, target, spec.speed);
+      } else if (enemy.kind === 'guard') {
+        // Steer towards a point orbiting the coin, so the guard glides over when the coin moves.
+        enemy.orbitAngle += spec.orbitSpeed * delta / 1000;
+        const tx = this.coin.x + Math.cos(enemy.orbitAngle) * spec.orbitRadius;
+        const ty = this.coin.y + Math.sin(enemy.orbitAngle) * spec.orbitRadius;
+        const pull = new Phaser.Math.Vector2(tx - enemy.x, ty - enemy.y).scale(8).limit(spec.maxSpeed);
+        enemy.body.setVelocity(pull.x, pull.y);
+      } else if (enemy.kind === 'dasher') {
+        this.updateDasher(enemy, spec, now);
+      }
+    }
+  }
+
+  updateDasher(enemy, spec, now) {
+    const k = this.cfg.colors;
+    if (enemy.state === 'windup') {
+      // Flash and show the charge line; the target was locked when the windup began.
+      if (Math.floor(now / 90) % 2) enemy.setFillStyle(k.warning, 1);
+      else enemy.setFillStyle(k.dasher, 0.45);
+      this.telegraph.lineStyle(2, k.dasher, 0.5)
+        .lineBetween(enemy.x, enemy.y, enemy.targetX, enemy.targetY);
+    }
+    if (now < enemy.stateUntil) return;
+    if (enemy.state === 'rest') {
+      const target = this.nearestPlayer(enemy);
+      if (!target) return;
+      enemy.state = 'windup';
+      enemy.stateUntil = now + spec.windupMs;
+      enemy.targetX = target.x;
+      enemy.targetY = target.y;
+    } else if (enemy.state === 'windup') {
+      enemy.state = 'dash';
+      enemy.stateUntil = now + spec.dashMs;
+      enemy.setFillStyle(k.dasher, 0.45);
+      this.physics.moveTo(enemy, enemy.targetX, enemy.targetY, spec.dashSpeed);
+    } else {
+      enemy.state = 'rest';
+      enemy.stateUntil = now + spec.restMs;
+      enemy.body.setVelocity(0, 0);
+    }
+  }
+
+  // Coins from either player count towards the shared level progress.
+  collectCoin(player) {
+    if (this.finished || player.out) return;
+    const c = this.cfg;
+    player.score++;
+    window.CoinDashSound.coin();
+    this.levelCoins++;
+    this.placeCoin();
+    if (this.levelCoins < c.coinsPerLevel) return;
+    if (this.levelIndex + 1 < c.levels.length) this.startLevel(this.levelIndex + 1);
+    else {
+      this.cleared = true;
+      this.finish('You cleared every level!');
+    }
+  }
+
+  // Called only when no shield or invincibility blocked the hit (see shieldBlocks).
+  hitPlayer(player) {
+    if (this.finished || player.out) return;
+    player.lives--;
+    this.cameras.main.shake(150, 0.01);
+    if (player.lives <= 0) {
+      this.knockOut(player);
+      return;
+    }
+    player.invulnerableUntil = this.time.now + this.cfg.hitInvincibleMs;
+    window.CoinDashSound.hit();
+  }
+
   knockOut(player) {
     if (this.finished || player.out) return;
     player.out = true;
@@ -93,7 +229,7 @@ class CoinDash extends Phaser.Scene {
     player.sprite.setAlpha(0.3);
     player.shieldRing.setVisible(false);
     if (this.players.every(p => p.out)) {
-      this.finish(this.playerCount === 1 ? 'A drone caught you!' : 'Both players were caught!');
+      this.finish(this.playerCount === 1 ? 'Out of lives!' : 'Both players are out of lives!');
     } else {
       window.CoinDashSound.hit();
     }
@@ -110,8 +246,8 @@ class CoinDash extends Phaser.Scene {
     } else {
       const pausedFor = this.time.now - this.pausedAt;
       this.deadline += pausedFor;
-      for (const target of [this, ...this.players]) {
-        for (const k of ['speedUntil', 'shieldUntil', 'invulnerableUntil', 'bonusUntil']) {
+      for (const target of [this, ...this.players, ...this.enemies.getChildren()]) {
+        for (const k of ['speedUntil', 'shieldUntil', 'invulnerableUntil', 'bonusUntil', 'stateUntil']) {
           if (target[k] > this.pausedAt) target[k] += pausedFor;
         }
       }
@@ -119,15 +255,18 @@ class CoinDash extends Phaser.Scene {
     }
   }
 
+  glow(obj, color, strength) {
+    return obj.postFX?.addGlow(color, strength, 0, false, 0.1, 12);
+  }
+
   styleScene() {
     const c = COIN_DASH, k = c.colors;
-    const glow = (obj, color, strength) => obj.postFX?.addGlow(color, strength, 0, false, 0.1, 12);
     this.players.forEach(p => {
       p.sprite.setStrokeStyle(2, k.outline, 0.9);
-      glow(p.sprite, p.color, 4);
+      this.glow(p.sprite, p.color, 4);
     });
     this.coin.setStrokeStyle(2, k.outline, 0.8);
-    const coinGlow = glow(this.coin, k.coin, 2);
+    const coinGlow = this.glow(this.coin, k.coin, 2);
     if (coinGlow) {
       this.tweens.add({ targets: coinGlow, outerStrength: 6, duration: 600, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     }
@@ -136,10 +275,6 @@ class CoinDash extends Phaser.Scene {
     const follow = () => this.coinRing.setPosition(this.coin.x, this.coin.y);
     this.events.on('postupdate', follow);
     this.events.once('shutdown', () => this.events.off('postupdate', follow));
-    this.drones.getChildren().forEach(d => {
-      d.setFillStyle(k.drone, 0.45).setStrokeStyle(2, k.drone);
-      glow(d, k.drone, 4);
-    });
     const g = this.add.graphics().setDepth(5);
     g.fillStyle(k.background, 0.85).fillRect(0, 0, c.width, 44);
     g.lineStyle(2, k.accent, 0.9).lineBetween(0, 44, c.width, 44);
@@ -175,7 +310,7 @@ class CoinDash extends Phaser.Scene {
     this.coin.body.reset(x, y);
   }
 
-  update() {
+  update(time, delta) {
     if (this.finished || this.paused) return;
     const now = this.time.now;
     const held = (controls, dir) => controls.some(keys => keys[dir].isDown);
@@ -187,13 +322,21 @@ class CoinDash extends Phaser.Scene {
       const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(this.cfg.playerSpeed * boost);
       player.sprite.body.setVelocity(direction.x, direction.y);
     }
-    const seconds = Math.max(0, Math.ceil((this.deadline - now) / 1000));
-    const scores = this.playerCount === 1
-      ? `Coins: ${this.players[0].score}`
-      : this.players.map(p => `${p.name}: ${p.score}${p.out ? ' (out)' : ''}`).join('  ');
-    this.hud.setText(`${scores}   Best: ${this.best}   ${this.cfg.label}   Time: ${seconds}s`);
-    if (seconds === 0) this.finish('Time is up!');
+    this.updateEnemies(delta);
+    this.updateHud();
+    if (now >= this.deadline) this.finish('Time is up!');
     this.updatePowerUps();
+  }
+
+  updateHud() {
+    const c = this.cfg;
+    const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
+    const hearts = p => '♥'.repeat(p.lives) + '·'.repeat(c.lives - p.lives);
+    const level = `Level ${this.levelIndex + 1}/${c.levels.length} (${this.levelCoins}/${c.coinsPerLevel})`;
+    const scores = this.playerCount === 1
+      ? `${hearts(this.players[0])}  Coins: ${this.players[0].score}`
+      : this.players.map(p => `${p.name} ${hearts(p)} ${p.score}`).join('  ');
+    this.hud.setText(`${level}  ${scores}  Best: ${this.best}  ${c.label}  Time: ${seconds}s`);
   }
 
   initPowerUps() {
@@ -206,7 +349,8 @@ class CoinDash extends Phaser.Scene {
       player.shieldRing = this.add.circle(0, 0, 21).setStrokeStyle(3, c.powerUps.colors.shield)
         .setVisible(false);
     }
-    this.powerUpLabel = this.add.text(c.width - 18, 12, '', { font: '18px monospace', color: '#ffffff' })
+    // Sits just below the HUD bar, which the level and lives readout fills.
+    this.powerUpLabel = this.add.text(c.width - 18, 50, '', { font: '18px monospace', color: '#ffffff' })
       .setOrigin(1, 0);
     this.schedulePowerUp();
   }
@@ -288,21 +432,24 @@ class CoinDash extends Phaser.Scene {
   finish(reason) {
     if (this.finished) return;
     this.finished = true;
-    window.CoinDashSound[this.time.now >= this.deadline ? 'timeUp' : 'hit']();
+    window.CoinDashSound[this.cleared ? 'coin' : this.time.now >= this.deadline ? 'timeUp' : 'hit']();
     this.physics.pause();
-    const c = COIN_DASH;
+    this.telegraph.clear();
+    this.updateHud();
+    const c = this.cfg;
     const top = Math.max(...this.players.map(p => p.score));
     const newBest = top > this.best;
     if (newBest) this.saveHighScore(this.best = top);
     const bestLine = newBest ? 'New high score!' : `Best: ${this.best}`;
+    const levelLine = `Reached level ${this.levelIndex + 1}/${c.levels.length} · ${c.label}`;
     let summary;
     if (this.playerCount === 1) {
-      summary = `${this.players[0].score} coins collected · ${this.cfg.label}`;
+      summary = `${this.players[0].score} coins collected\n${levelLine}`;
     } else {
       const [p1, p2] = this.players;
       const verdict = p1.score === p2.score ? "It's a tie!"
         : `${p1.score > p2.score ? 'Player 1' : 'Player 2'} wins!`;
-      summary = `P1 ${p1.score} – ${p2.score} P2 · ${this.cfg.label}\n${verdict}`;
+      summary = `P1 ${p1.score} – ${p2.score} P2\n${verdict}\n${levelLine}`;
     }
     const lines = `${reason}\n${summary}\n${bestLine}\nPress R to try again`;
     const height = 60 + lines.split('\n').length * 36;
