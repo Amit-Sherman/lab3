@@ -1,9 +1,13 @@
 # Coin Dash — Lab 3 starter
 
-Collect coins, avoid drones, and survive a 45-second round. Move with arrow keys or WASD;
+Collect coins, avoid drones, and survive the round. Move with arrow keys or WASD;
 press P (or Esc) to pause and R to restart. This is deliberately small so you can add features during the lab.
 Your best score is saved in the browser's `localStorage` and survives a reload
 (if storage is blocked, it is kept for the current session only).
+
+Press 1, 2 or 3 to pick the Easy, Normal or Hard preset and restart the round. Presets live in
+`settings.js` under `difficulties` (Easy: 60 s, 2 slow drones; Normal: 45 s, 3 drones;
+Hard: 30 s, 5 fast drones); the choice is remembered in the browser.
 
 **Play it here:** https://www.avivz.net/coin-dash/
 
@@ -38,7 +42,7 @@ laptops' JSON files together and save the combined HTML. Use the same time windo
 - `.gitignore`: keeps generated reports out of Git.
 - `index.html`: page and script loading.
 - `style.css`: page appearance.
-- `settings.js`: round duration, speeds, colours and dimensions.
+- `settings.js`: round duration, speeds, difficulty presets, colours and dimensions.
 - `sound.js`: synthesized sound effects (Web Audio) and the M mute toggle.
 - `game.js`: scene, input, collisions, score and end-of-round behaviour.
 - `vendor/phaser-3.90.0.min.js`: the pinned Phaser runtime, byte for byte the file published at

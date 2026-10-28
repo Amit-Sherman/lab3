@@ -3,7 +3,12 @@ class CoinDash extends Phaser.Scene {
   constructor() { super('CoinDash'); }
 
   create() {
-    const c = COIN_DASH;
+    const d = COIN_DASH.difficulties;
+    if (!d[this.difficulty]) {
+      try { this.difficulty = localStorage.getItem('coinDash.difficulty'); } catch (e) { /* no storage */ }
+      if (!d[this.difficulty]) this.difficulty = COIN_DASH.defaultDifficulty;
+    }
+    const c = this.cfg = { ...COIN_DASH, ...d[this.difficulty] };
     this.score = 0;
     this.best = this.loadHighScore();
     this.finished = false;
@@ -21,7 +26,7 @@ class CoinDash extends Phaser.Scene {
     this.placeCoin();
     this.drones = this.physics.add.group();
     for (let i = 0; i < c.droneCount; i++) {
-      const drone = this.add.rectangle(90 + i * 270, 100, 26, 26, c.colors.drone);
+      const drone = this.add.rectangle(c.width * (i + 0.5) / c.droneCount, 100, 26, 26, c.colors.drone);
       this.drones.add(drone);
       drone.body.setCollideWorldBounds(true).setBounce(1, 1);
       const angle = (35 + i * 105) * Math.PI / 180;
@@ -45,6 +50,14 @@ class CoinDash extends Phaser.Scene {
     ]).setDepth(10).setVisible(false);
     this.input.keyboard.on('keydown-P', () => this.togglePause());
     this.input.keyboard.on('keydown-ESC', () => this.togglePause());
+    Object.entries({ ONE: 'easy', TWO: 'normal', THREE: 'hard' }).forEach(([key, name]) =>
+      this.input.keyboard.on(`keydown-${key}`, () => this.setDifficulty(name)));
+  }
+
+  setDifficulty(name) {
+    this.difficulty = name;
+    try { localStorage.setItem('coinDash.difficulty', name); } catch (e) { /* no storage */ }
+    this.scene.restart();
   }
 
   togglePause() {
@@ -78,10 +91,10 @@ class CoinDash extends Phaser.Scene {
       - Number(this.cursors.left.isDown || this.keys.A.isDown);
     const dy = Number(this.cursors.down.isDown || this.keys.S.isDown)
       - Number(this.cursors.up.isDown || this.keys.W.isDown);
-    const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
+    const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(this.cfg.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
-    this.hud.setText(`Coins: ${this.score}   Best: ${this.best}             Time: ${seconds}s`);
+    this.hud.setText(`Coins: ${this.score}   Best: ${this.best}      ${this.cfg.label}      Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
   }
 
@@ -96,7 +109,7 @@ class CoinDash extends Phaser.Scene {
     const bestLine = newBest ? 'New high score!' : `Best: ${this.best}`;
     this.add.rectangle(c.width / 2, c.height / 2, 460, 190, 0x0a1120, 0.95);
     this.add.text(c.width / 2, c.height / 2,
-      `${reason}\n${this.score} coins collected\n${bestLine}\nPress R to try again`,
+      `${reason}\n${this.score} coins collected · ${this.cfg.label}\n${bestLine}\nPress R to try again`,
       { font: '24px monospace', color: '#ffffff', align: 'center', lineSpacing: 12 }
     ).setOrigin(0.5);
   }
