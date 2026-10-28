@@ -5,6 +5,7 @@ class CoinDash extends Phaser.Scene {
   create() {
     const c = COIN_DASH;
     this.score = 0;
+    this.best = this.loadHighScore();
     this.finished = false;
     this.deadline = this.time.now + c.roundSeconds * 1000;
     this.physics.world.setBounds(0, 44, c.width, c.height - 44);
@@ -58,7 +59,7 @@ class CoinDash extends Phaser.Scene {
     const direction = new Phaser.Math.Vector2(dx, dy).normalize().scale(COIN_DASH.playerSpeed);
     this.player.body.setVelocity(direction.x, direction.y);
     const seconds = Math.max(0, Math.ceil((this.deadline - this.time.now) / 1000));
-    this.hud.setText(`Coins: ${this.score}                       Time: ${seconds}s`);
+    this.hud.setText(`Coins: ${this.score}   Best: ${this.best}             Time: ${seconds}s`);
     if (seconds === 0) this.finish('Time is up!');
   }
 
@@ -67,11 +68,26 @@ class CoinDash extends Phaser.Scene {
     this.finished = true;
     this.physics.pause();
     const c = COIN_DASH;
-    this.add.rectangle(c.width / 2, c.height / 2, 460, 150, 0x0a1120, 0.95);
+    const newBest = this.score > this.best;
+    if (newBest) this.saveHighScore(this.best = this.score);
+    const bestLine = newBest ? 'New high score!' : `Best: ${this.best}`;
+    this.add.rectangle(c.width / 2, c.height / 2, 460, 190, 0x0a1120, 0.95);
     this.add.text(c.width / 2, c.height / 2,
-      `${reason}\n${this.score} coins collected\nPress R to try again`,
+      `${reason}\n${this.score} coins collected\n${bestLine}\nPress R to try again`,
       { font: '24px monospace', color: '#ffffff', align: 'center', lineSpacing: 12 }
     ).setOrigin(0.5);
+  }
+
+  // localStorage can throw (private mode, file://); fall back to a session-only best.
+  loadHighScore() {
+    try {
+      return Math.max(Number(localStorage.getItem(COIN_DASH.highScoreKey)) || 0, this.sessionBest || 0);
+    } catch (e) { return this.sessionBest || 0; }
+  }
+
+  saveHighScore(score) {
+    this.sessionBest = score;
+    try { localStorage.setItem(COIN_DASH.highScoreKey, String(score)); } catch (e) { /* session only */ }
   }
 }
 window.coinDashGame = new Phaser.Game({
