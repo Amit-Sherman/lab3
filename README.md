@@ -1,7 +1,9 @@
 # Coin Dash — Lab 3 starter
 
 Collect coins, avoid drones, and survive the round. Move with arrow keys or WASD;
-press P (or Esc) to pause and R to restart. This is deliberately small so you can add features during the lab.
+press P (or Esc) to pause and R to restart. Power-ups appear every 8–12 seconds and vanish after 6: a blue triangle
+(speed boost), a purple diamond (shield that absorbs one drone hit) and a white star (+5 seconds).
+This is deliberately small so you can add features during the lab.
 Your best score is saved in the browser's `localStorage` and survives a reload
 (if storage is blocked, it is kept for the current session only).
 
